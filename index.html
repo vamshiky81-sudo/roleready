@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>RoleReady — UK Job Board & AI Resume Assistant</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    :root {
+      --bg: #f5f4f0;
+      --surface: #ffffff;
+      --border: #e4e2dc;
+      --text: #1a1a18;
+      --muted: #6b6b65;
+      --accent: #1d6b3e;
+      --accent2: #e8f5ee;
+      --accent3: #0f3d22;
+      --red: #dc2626;
+      --amber: #d97706;
+      --blue: #1d4ed8;
+      --sidebar: #1a1a18;
+      --sidebar-text: #e8e8e4;
+      --sidebar-muted: #888884;
+      --radius: 12px;
+      --shadow: 0 2px 12px rgba(0,0,0,0.06);
+      --shadow-lg: 0 8px 40px rgba(0,0,0,0.12);
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    html{scroll-behavior:smooth;}
+    body{background:var(--bg);font-family:'Instrument Sans',sans-serif;color:var(--text);-webkit-font-smoothing:antialiased;min-height:100vh;}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
+    @keyframes spin{to{transform:rotate(360deg);}}
+    @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+    @keyframes slideIn{from{opacity:0;transform:translateX(-8px);}to{opacity:1;transform:translateX(0);}}
+    input,textarea,select{font-family:inherit;}
+    input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent)!important;box-shadow:0 0 0 3px rgba(29,107,62,0.12);}
+    a{text-decoration:none;color:inherit;}
+    button{font-family:inherit;cursor:pointer;}
+    ::-webkit-scrollbar{width:5px;height:5px;}
+    ::-webkit-scrollbar-track{background:transparent;}
+    ::-webkit-scrollbar-thumb{background:#ccc;border-radius:3px;}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef,useCallback} = React;
+
+/* ─── Storage ──────────────────────────────────────────────────────── */
+const S={
+  get:(k)=>{try{return JSON.parse(localStorage.getItem(k));}catch{return null;}},
+  set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}}
+};
+
+/* ─── Constants ────────────────────────────────────────────────────── */
+const uid=()=>Math.random().toString(36).slice(2,10);
+const today=()=>new Date().toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
+
+const UK_CATEGORIES=["All Roles","Software Engineering","Data & Analytics","Product Management","Marketing","Sales","Finance","HR & People","Design & UX","DevOps & Cloud","Cybersecurity","Legal","Healthcare","Education","Customer Success"];
+const UK_LOCATIONS=["All UK","London","Manchester","Birmingham","Leeds","Bristol","Edinburgh","Glasgow","Liverpool","Sheffield","Remote UK","Hybrid UK"];
+const JOB_TYPES=["All Types","Full-time","Part-time","Contract","Freelance","Graduate","Internship"];
+const SOURCES=["LinkedIn","Indeed","Reed","Total Jobs","Glassdoor","CWJobs","Guardian Jobs","Company Site","Recruiter","Referral","Other"];
+
+const STATUS={
+  saved:    {label:"Saved",    c:"#6b6b65",bg:"#f5f4f0"},
+  applied:  {label:"Applied",  c:"#1d4ed8",bg:"#eff6ff"},
+  screening:{label:"Screening",c:"#7c3aed",bg:"#f5f3ff"},
+  interview:{label:"Interview",c:"#d97706",bg:"#fffbeb"},
+  offer:    {label:"Offer",    c:"#1d6b3e",bg:"#ecfdf5"},
+  rejected: {label:"Rejected", c:"#dc2626",bg:"#fef2f2"},
+};
+
+/* ─── Mock UK Jobs Data ────────────────────────────────────────────── */
+const MOCK_JOBS=[
+  {id:"j1",title:"Senior Salesforce Marketing Cloud Consultant",company:"Accenture",location:"London, UK",type:"Full-time",salary:"£65,000–£85,000",source:"LinkedIn",posted:"2 min ago",tags:["SFMC","Salesforce","CRM","Marketing Cloud"],remote:"Hybrid",featured:true},
+  {id:"j2",title:"SFMC Developer",company:"Deloitte Digital",location:"Manchester, UK",type:"Full-time",salary:"£55,000–£70,000",source:"Reed",posted:"18 min ago",tags:["SFMC","AMPscript","SQL","API"],remote:"Hybrid",featured:false},
+  {id:"j3",title:"CRM Marketing Manager",company:"Marks & Spencer",location:"London, UK",type:"Full-time",salary:"£50,000–£65,000",source:"Indeed",posted:"25 min ago",tags:["CRM","Segmentation","Email Marketing","Analytics"],remote:"On-site",featured:false},
+  {id:"j4",title:"Marketing Cloud Architect",company:"Capgemini",location:"Remote UK",type:"Contract",salary:"£600–£750/day",source:"CWJobs",posted:"1 hr ago",tags:["SFMC","Architecture","Salesforce","Cloud"],remote:"Remote",featured:true},
+  {id:"j5",title:"Email Marketing Specialist",company:"ASOS",location:"London, UK",type:"Full-time",salary:"£38,000–£48,000",source:"Glassdoor",posted:"2 hr ago",tags:["Email","HTML","CSS","Klaviyo"],remote:"Hybrid",featured:false},
+  {id:"j6",title:"Data Cloud Consultant",company:"IBM",location:"Edinburgh, UK",type:"Full-time",salary:"£60,000–£75,000",source:"LinkedIn",posted:"3 hr ago",tags:["Data Cloud","Salesforce","CDP","Analytics"],remote:"Hybrid",featured:false},
+  {id:"j7",title:"Salesforce Administrator",company:"BT Group",location:"Birmingham, UK",type:"Full-time",salary:"£40,000–£52,000",source:"Indeed",posted:"4 hr ago",tags:["Salesforce","Admin","CRM","Flow"],remote:"Hybrid",featured:false},
+  {id:"j8",title:"Digital Marketing Manager",company:"Tesco",location:"Welwyn Garden City, UK",type:"Full-time",salary:"£55,000–£68,000",source:"Total Jobs",posted:"5 hr ago",tags:["Digital Marketing","CRM","Analytics","Strategy"],remote:"Hybrid",featured:false},
+  {id:"j9",title:"Salesforce Marketing Cloud Email Specialist",company:"Publicis Sapient",location:"London, UK",type:"Contract",salary:"£400–£550/day",source:"CWJobs",posted:"6 hr ago",tags:["SFMC","Email","AMPscript","Journey Builder"],remote:"Remote",featured:false},
+  {id:"j10",title:"CRM Operations Analyst",company:"Sky",location:"Osterley, London",type:"Full-time",salary:"£35,000–£45,000",source:"Reed",posted:"8 hr ago",tags:["CRM","SQL","Data","Reporting"],remote:"Hybrid",featured:false},
+  {id:"j11",title:"Senior CRM Manager",company:"Vodafone",location:"Newbury, UK",type:"Full-time",salary:"£65,000–£80,000",source:"LinkedIn",posted:"10 hr ago",tags:["CRM","Salesforce","Strategy","Team Lead"],remote:"Hybrid",featured:true},
+  {id:"j12",title:"Marketing Technology Consultant",company:"WPP",location:"London, UK",type:"Full-time",salary:"£55,000–£70,000",source:"Glassdoor",posted:"12 hr ago",tags:["MarTech","SFMC","CDP","Integration"],remote:"Hybrid",featured:false},
+];
+
+/* ─── Claude API ───────────────────────────────────────────────────── */
+async function callClaude(system,user,apiKey){
+  const res=await fetch("https://api.anthropic.com/v1/messages",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+    body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:1000,system,messages:[{role:"user",content:user}]})
+  });
+  if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e?.error?.message||"HTTP "+res.status);}
+  const d=await res.json();
+  return d.content?.map(b=>b.text||"").join("")||"";
+}
+
+async function runAnalysis(resume,jd,apiKey){
+  const sys=`You are an expert ATS analyst and UK career coach. Analyse the resume against the job description. Return ONLY valid JSON, no markdown, no backticks. Schema: {"score":<0-100>,"summary":"<2 sentences>","missingKeywords":["kw1","kw2"],"presentKeywords":["kw1","kw2"],"topSkillsRequired":["s1","s2","s3","s4","s5"],"alterations":[{"section":"name","issue":"what is wrong","suggestion":"exact fix"}],"strengths":["s1","s2","s3"],"quickWins":["w1","w2","w3"]}`;
+  const raw=await callClaude(sys,"RESUME:\n"+resume+"\n\nJOB DESCRIPTION:\n"+jd,apiKey);
+  try{return JSON.parse(raw.replace(/```json|```/g,"").trim());}catch{return null;}
+}
+
+/* ─── Shared UI Components ─────────────────────────────────────────── */
+const inp={width:"100%",padding:"10px 13px",borderRadius:"9px",border:"1.5px solid var(--border)",fontSize:"13px",background:"#fff",color:"var(--text)"};
+const txta={...inp,resize:"vertical",lineHeight:1.6};
+const lbl={display:"block",fontSize:"12px",fontWeight:600,marginBottom:"5px",color:"var(--muted)",textTransform:"uppercase",letterSpacing:"0.05em"};
+const btnPrimary={background:"var(--accent)",color:"#fff",border:"none",borderRadius:"10px",padding:"11px 24px",fontSize:"14px",fontWeight:600,cursor:"pointer",fontFamily:"'Instrument Sans',sans-serif",transition:"all 0.15s"};
+const btnGhost={background:"transparent",color:"var(--text)",border:"1.5px solid var(--border)",borderRadius:"10px",padding:"9px 18px",fontSize:"13px",fontWeight:600,cursor:"pointer",fontFamily:"'Instrument Sans',sans-serif"};
+
+function Pill({label,v="def",size="sm"}){
+  const vs={green:{bg:"#dcfce7",c:"#166534"},red:{bg:"#fee2e2",c:"#991b1b"},blue:{bg:"#dbeafe",c:"#1e40af"},amber:{bg:"#fef3c7",c:"#92400e"},purple:{bg:"#f5f3ff",c:"#6d28d9"},def:{bg:"#f0f0eb",c:"#444440"}};
+  const s=vs[v]||vs.def;
+  const p=size==="sm"?"2px 8px":"3px 11px";
+  const fs=size==="sm"?"11px":"12px";
+  return <span style={{display:"inline-flex",alignItems:"center",padding:p,borderRadius:"999px",fontSize:fs,fontWeight:600,background:s.bg,color:s.c,margin:"2px"}}>{label}</span>;
+}
+
+function ScoreRing({score}){
+  const r=46,c=2*Math.PI*r,dash=c*(score/100);
+  const col=score>=75?"#1d6b3e":score>=50?"#d97706":"#dc2626";
+  return(
+    <svg width="112" height="112" viewBox="0 0 112 112">
+      <circle cx="56" cy="56" r={r} fill="none" stroke="#e4e2dc" strokeWidth="10"/>
+      <circle cx="56" cy="56" r={r} fill="none" stroke={col} strokeWidth="10" strokeDasharray={`${dash} ${c}`} strokeLinecap="round" transform="rotate(-90 56 56)" style={{transition:"stroke-dasharray 1.2s ease"}}/>
+      <text x="56" y="52" textAnchor="middle" fontSize="22" fontWeight="800" fill={col} fontFamily="Syne,sans-serif">{score}</text>
+      <text x="56" y="66" textAnchor="middle" fontSize="9" fill="#6b6b65" fontFamily="Instrument Sans,sans-serif">ATS SCORE</text>
+    </svg>
+  );
+}
+
+function Modal({open,onClose,children,maxW="680px"}){
+  if(!open) return null;
+  return(
+    <div style={{position:"fixed",inset:0,zIndex:300,background:"rgba(10,10,8,0.7)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{background:"#fff",borderRadius:"18px",maxWidth:maxW,width:"100%",maxHeight:"92vh",overflowY:"auto",boxShadow:"0 48px 120px rgba(0,0,0,0.28)",padding:"36px",animation:"fadeUp 0.2s ease",position:"relative"}}>
+        <button onClick={onClose} style={{position:"absolute",top:"16px",right:"16px",background:"#f5f4f0",border:"none",borderRadius:"8px",width:"32px",height:"32px",cursor:"pointer",fontSize:"16px",color:"var(--muted)",display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function StatusDrop({status,onChange}){
+  const [open,setOpen]=useState(false);
+  const m=STATUS[status]||STATUS.saved;
+  return(
+    <div style={{position:"relative"}}>
+      <button onClick={()=>setOpen(o=>!o)} style={{background:m.bg,color:m.c,border:`1.5px solid ${m.c}44`,borderRadius:"8px",padding:"4px 11px",fontSize:"12px",fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
+        {m.label} ▾
+      </button>
+      {open&&(
+        <div style={{position:"absolute",top:"34px",left:0,zIndex:100,background:"#fff",borderRadius:"12px",boxShadow:"0 8px 40px rgba(0,0,0,0.15)",overflow:"hidden",minWidth:"140px",border:"1.5px solid var(--border)"}}>
+          {Object.entries(STATUS).map(([k,v])=>(
+            <button key={k} onClick={()=>{onChange(k);setOpen(false);}} style={{display:"block",width:"100%",textAlign:"left",padding:"9px 14px",fontSize:"13px",fontWeight:600,background:status===k?v.bg:"transparent",color:v.c,border:"none",cursor:"pointer"}}>{v.label}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── API KEY SETUP ────────────────────────────────────────────────── */
+function ApiKeySetup({onSave}){
+  const [key,setKey]=useState("");
+  const [err,setErr]=useState("");
+  const [testing,setTesting]=useState(false);
+
+  async function go(){
+    if(!key.trim()){setErr("Please enter your API key.");return;}
+    if(!key.startsWith("sk-ant-")){setErr("Anthropic keys start with sk-ant- — please check yours.");return;}
+    setErr("");setTesting(true);
+    try{
+      await callClaude("Reply with only: OK","ping",key);
+      S.set("rr_apikey",key);onSave(key);
+    }catch(e){setErr("Key test failed: "+e.message);}
+    setTesting(false);
+  }
+
+  return(
+    <div style={{minHeight:"100vh",background:"var(--sidebar)",display:"flex",alignItems:"center",justifyContent:"center",padding:"24px"}}>
+      <div style={{background:"#fff",borderRadius:"20px",maxWidth:"480px",width:"100%",padding:"44px",boxShadow:"0 40px 100px rgba(0,0,0,0.5)",animation:"fadeUp 0.4s ease"}}>
+        <div style={{fontFamily:"'Syne',sans-serif",fontSize:"26px",fontWeight:800,marginBottom:"4px",letterSpacing:"-0.03em"}}>
+          Role<span style={{color:"var(--accent)"}}>Ready</span> <span style={{fontSize:"14px",fontWeight:400,color:"var(--muted)"}}>UK</span>
+        </div>
+        <p style={{color:"var(--muted)",fontSize:"14px",marginBottom:"28px"}}>AI-powered UK job board and resume assistant</p>
+        <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:"18px",fontWeight:700,margin:"0 0 8px"}}>Enter your Anthropic API Key</h2>
+        <p style={{color:"var(--muted)",fontSize:"13px",lineHeight:1.7,marginBottom:"20px"}}>RoleReady uses Claude AI to score and improve your resume. Your key is saved only in your browser.</p>
+        <div style={{background:"#f0faf4",border:"1.5px solid #a7f3d0",borderRadius:"10px",padding:"16px",marginBottom:"20px"}}>
+          <p style={{margin:"0 0 8px",fontWeight:700,color:"var(--accent3)",fontSize:"13px"}}>Get your free API key:</p>
+          <ol style={{margin:0,paddingLeft:"18px",color:"var(--accent3)",fontSize:"12px",lineHeight:2.2}}>
+            <li>Go to <strong>console.anthropic.com</strong></li>
+            <li>Sign up free (no credit card for key)</li>
+            <li>Click <strong>API Keys</strong> → <strong>Create Key</strong></li>
+            <li>Add $5 credit in Billing to activate</li>
+            <li>Copy key and paste below</li>
+          </ol>
+        </div>
+        <div style={{marginBottom:"14px"}}>
+          <label style={lbl}>API Key</label>
+          <input type="password" value={key} onChange={e=>setKey(e.target.value)} placeholder="sk-ant-api03-..." style={{...inp,fontFamily:"'JetBrains Mono',monospace",fontSize:"12px"}} onKeyDown={e=>e.key==="Enter"&&go()}/>
+        </div>
+        {err&&<div style={{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:"8px",padding:"11px",marginBottom:"14px",fontSize:"13px",color:"var(--red)"}}>{err}</div>}
+        <button onClick={go} disabled={testing||!key.trim()} style={{...btnPrimary,width:"100%",padding:"14px",opacity:testing||!key.trim()?0.6:1,fontSize:"15px"}}>
+          {testing?"Testing...":"Save Key & Enter RoleReady"}
+        </button>
+        <p style={{color:"var(--muted)",fontSize:"11px",textAlign:"center",marginTop:"14px"}}>Key saved locally in your browser only</p>
+      </div>
+    </div>
+  );
+}
+
+/* ─── JOB BOARD VIEW ───────────────────────────────────────────────── */
+function JobBoardView({apiKey,onTrackJob}){
+  const [search,setSearch]=useState("");
+  const [category,setCategory]=useState("All Roles");
+  const [location,setLocation]=useState("All UK");
+  const [jobType,setJobType]=useState("All Types");
+  const [selectedJob,setSelectedJob]=useState(null);
+  const [analysing,setAnalysing]=useState(false);
+  const [matchResult,setMatchResult]=useState(null);
+  const [showMatchModal,setShowMatchModal]=useState(false);
+  const [resume,setResume]=useState(()=>S.get("rr_resume")||"");
+  const [lastRefresh,setLastRefresh]=useState(new Date());
+  const [countdown,setCountdown]=useState(300);
+
+  // Countdown timer (cosmetic — simulates live refresh like JobNinjas)
+  useEffect(()=>{
+    const t=setInterval(()=>{
+      setCountdown(c=>{
+        if(c<=1){setLastRefresh(new Date());return 300;}
+        return c-1;
+      });
+    },1000);
+    return ()=>clearInterval(t);
+  },[]);
+
+  const mm=Math.floor(countdown/60),ss=countdown%60;
+
+  const filtered=MOCK_JOBS.filter(j=>{
+    const q=search.toLowerCase();
+    const matchQ=!q||(j.title+j.company+j.tags.join(" ")).toLowerCase().includes(q);
+    const matchL=location==="All UK"||j.location.includes(location.replace(" UK",""))||j.remote===location.replace(" UK","");
+    const matchT=jobType==="All Types"||j.type===jobType;
+    const matchC=category==="All Roles"||j.tags.some(t=>t.toLowerCase().includes(category.toLowerCase().split(" ")[0].toLowerCase()));
+    return matchQ&&matchL&&matchT&&matchC;
+  });
+
+  async function matchWithResume(job){
+    if(!resume.trim()){alert("Please save your resume in the Resume Scanner tab first, or paste it when prompted.\n\nClick the Resume Scanner tab to add your resume.");return;}
+    setAnalysing(true);setMatchResult(null);setSelectedJob(job);setShowMatchModal(true);
+    try{
+      const r=await runAnalysis(resume,`Job Title: ${job.title}\nCompany: ${job.company}\nLocation: ${job.location}\nTags/Skills: ${job.tags.join(", ")}\nType: ${job.type}\nSalary: ${job.salary}`,apiKey);
+      setMatchResult(r);
+    }catch(e){alert("Analysis error: "+e.message);}
+    setAnalysing(false);
+  }
+
+  const remoteBadge=(r)=>{
+    const colors={Remote:{bg:"#dcfce7",c:"#166534"},Hybrid:{bg:"#dbeafe",c:"#1e40af"},"On-site":{bg:"#f0f0eb",c:"#444440"}};
+    const s=colors[r]||colors["On-site"];
+    return <span style={{display:"inline-flex",alignItems:"center",padding:"2px 8px",borderRadius:"999px",fontSize:"11px",fontWeight:600,background:s.bg,color:s.c}}>{r}</span>;
+  };
+
+  return(
+    <div style={{animation:"fadeUp 0.3s ease"}}>
+      {/* Search bar */}
+      <div style={{background:"#fff",borderRadius:"14px",border:"1.5px solid var(--border)",padding:"16px 20px",marginBottom:"16px",boxShadow:"var(--shadow)"}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr auto auto auto",gap:"10px",alignItems:"end"}}>
+          <div>
+            <label style={lbl}>Search Jobs</label>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Job title, skill, company..." style={{...inp,fontSize:"14px",padding:"11px 14px"}}/>
+          </div>
+          <div style={{minWidth:"160px"}}>
+            <label style={lbl}>Location</label>
+            <select value={location} onChange={e=>setLocation(e.target.value)} style={inp}>
+              {UK_LOCATIONS.map(l=><option key={l}>{l}</option>)}
+            </select>
+          </div>
+          <div style={{minWidth:"140px"}}>
+            <label style={lbl}>Job Type</label>
+            <select value={jobType} onChange={e=>setJobType(e.target.value)} style={inp}>
+              {JOB_TYPES.map(t=><option key={t}>{t}</option>)}
+            </select>
+          </div>
+          <button style={{...btnPrimary,padding:"10px 22px",marginTop:"18px"}}>Search</button>
+        </div>
+      </div>
+
+      {/* Category pills */}
+      <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"16px",overflowX:"auto",paddingBottom:"4px"}}>
+        {UK_CATEGORIES.map(c=>(
+          <button key={c} onClick={()=>setCategory(c)} style={{padding:"6px 14px",borderRadius:"999px",border:category===c?"2px solid var(--accent)":"1.5px solid var(--border)",background:category===c?"var(--accent)":"#fff",color:category===c?"#fff":"var(--muted)",fontSize:"12px",fontWeight:600,cursor:"pointer",whiteSpace:"nowrap",transition:"all 0.15s"}}>
+            {c}
+          </button>
+        ))}
+      </div>
+
+      {/* Stats bar */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px",flexWrap:"wrap",gap:"8px"}}>
+        <span style={{fontSize:"13px",color:"var(--muted)",fontWeight:500}}>
+          Showing <b style={{color:"var(--text)"}}>{filtered.length}</b> of <b style={{color:"var(--text)"}}>{MOCK_JOBS.length}</b> UK jobs
+        </span>
+        <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+          <div style={{width:"8px",height:"8px",borderRadius:"50%",background:"#1d6b3e",animation:"pulse 2s infinite"}}/>
+          <span style={{fontSize:"12px",color:"var(--muted)"}}>Live · Next refresh in <b style={{color:"var(--text)",fontFamily:"'JetBrains Mono',monospace"}}>{mm}:{String(ss).padStart(2,"0")}</b></span>
+        </div>
+      </div>
+
+      {/* Resume quick-save banner */}
+      {!resume&&(
+        <div style={{background:"#fffbeb",border:"1.5px solid #fde68a",borderRadius:"12px",padding:"12px 16px",marginBottom:"16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"10px"}}>
+          <span style={{fontSize:"13px",color:"#92400e",fontWeight:500}}>Upload your resume to get AI match scores on every job</span>
+          <button onClick={()=>document.getElementById("resumeTab")?.click()} style={{...btnPrimary,background:"#d97706",padding:"7px 16px",fontSize:"12px"}}>Add Resume</button>
+        </div>
+      )}
+
+      {/* Job cards */}
+      <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
+        {filtered.map(job=>(
+          <div key={job.id} style={{background:"#fff",borderRadius:"14px",border:job.featured?"2px solid var(--accent)":"1.5px solid var(--border)",padding:"18px 20px",boxShadow:"var(--shadow)",transition:"box-shadow 0.2s",position:"relative"}}>
+            {job.featured&&<div style={{position:"absolute",top:"-1px",right:"14px",background:"var(--accent)",color:"#fff",fontSize:"10px",fontWeight:700,padding:"3px 10px",borderRadius:"0 0 8px 8px",letterSpacing:"0.06em"}}>FEATURED</div>}
+            <div style={{display:"flex",alignItems:"flex-start",gap:"14px",flexWrap:"wrap"}}>
+              {/* Company logo placeholder */}
+              <div style={{width:"44px",height:"44px",borderRadius:"10px",background:"linear-gradient(135deg,var(--accent2),#fff)",border:"1.5px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"16px",flexShrink:0,fontWeight:700,color:"var(--accent)",fontFamily:"'Syne',sans-serif"}}>
+                {job.company[0]}
+              </div>
+              <div style={{flex:1,minWidth:"200px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap",marginBottom:"3px"}}>
+                  <h3 style={{fontFamily:"'Syne',sans-serif",fontSize:"15px",fontWeight:700,color:"var(--text)"}}>{job.title}</h3>
+                  {remoteBadge(job.remote)}
+                </div>
+                <div style={{fontSize:"13px",color:"var(--muted)",marginBottom:"8px"}}>
+                  {job.company} · {job.location} · {job.salary}
+                </div>
+                <div style={{display:"flex",gap:"4px",flexWrap:"wrap",marginBottom:"8px"}}>
+                  {job.tags.map(t=><Pill key={t} label={t} v="def"/>)}
+                  <Pill label={job.type} v="blue"/>
+                </div>
+                <div style={{fontSize:"11px",color:"#9ca3af"}}>
+                  via {job.source} · {job.posted}
+                </div>
+              </div>
+              <div style={{display:"flex",gap:"8px",alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
+                <button onClick={()=>matchWithResume(job)} style={{...btnPrimary,padding:"8px 16px",fontSize:"12px",background:resume?"var(--accent)":"#6b6b65"}}>
+                  {resume?"AI Match":"Check Match"}
+                </button>
+                <button onClick={()=>onTrackJob({id:uid(),title:job.title,company:job.company,source:job.source,url:"",resumeVersion:"",notes:"",status:"applied",appliedDate:today(),analysis:null})} style={{...btnGhost,padding:"7px 14px",fontSize:"12px"}}>
+                  Track
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {filtered.length===0&&(
+        <div style={{textAlign:"center",padding:"80px 0",color:"var(--muted)"}}>
+          <div style={{fontSize:"48px",marginBottom:"16px"}}>🔍</div>
+          <p style={{fontFamily:"'Syne',sans-serif",fontSize:"18px",fontWeight:700,marginBottom:"8px"}}>No jobs found</p>
+          <p style={{fontSize:"14px"}}>Try adjusting your search filters</p>
+        </div>
+      )}
+
+      {/* Match modal */}
+      <Modal open={showMatchModal} onClose={()=>setShowMatchModal(false)}>
+        {selectedJob&&(
+          <>
+            <h3 style={{fontFamily:"'Syne',sans-serif",fontSize:"20px",fontWeight:800,margin:"0 0 4px",letterSpacing:"-0.02em"}}>{selectedJob.title}</h3>
+            <p style={{color:"var(--muted)",fontSize:"13px",marginBottom:"24px"}}>{selectedJob.company} · {selectedJob.location} · {selectedJob.salary}</p>
+            {analysing&&(
+              <div style={{textAlign:"center",padding:"48px 0"}}>
+                <div style={{fontSize:"36px",display:"inline-block",animation:"spin 1.2s linear infinite"}}>⚙</div>
+                <p style={{marginTop:"14px",fontWeight:600}}>Matching your resume...</p>
+                <p style={{fontSize:"13px",color:"var(--muted)",marginTop:"4px"}}>Checking keyword overlap and skill gaps</p>
+              </div>
+            )}
+            {matchResult&&!analysing&&(
+              <div>
+                <div style={{display:"flex",alignItems:"center",gap:"28px",background:"var(--bg)",borderRadius:"14px",padding:"24px",marginBottom:"20px"}}>
+                  <ScoreRing score={matchResult.score}/>
+                  <div>
+                    <h4 style={{fontFamily:"'Syne',sans-serif",fontSize:"17px",fontWeight:700,margin:"0 0 6px"}}>{matchResult.score>=75?"Strong match":"Gaps to address"}</h4>
+                    <p style={{fontSize:"13px",color:"var(--muted)",lineHeight:1.6}}>{matchResult.summary}</p>
+                  </div>
+                </div>
+                <div style={{marginBottom:"16px"}}>
+                  <p style={{fontSize:"12px",fontWeight:700,color:"var(--muted)",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"8px"}}>Missing Keywords</p>
+                  <div>{matchResult.missingKeywords?.map(k=><Pill key={k} label={k} v="red"/>)}</div>
+                </div>
+                <div style={{marginBottom:"16px"}}>
+                  <p style={{fontSize:"12px",fontWeight:700,color:"var(--muted)",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"8px"}}>Quick Wins</p>
+                  {matchResult.quickWins?.map((w,i)=>(
+                    <div key={i} style={{display:"flex",gap:"10px",padding:"10px 12px",background:"var(--bg)",borderRadius:"8px",marginBottom:"6px",fontSize:"13px"}}>
+                      <span style={{background:"var(--accent2)",color:"var(--accent)",borderRadius:"50%",width:"20px",height:"20px",display:"inline-flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:"11px",flexShrink:0}}>{i+1}</span>
+                      {w}
+                    </div>
+                  ))}
+                </div>
+                <div style={{display:"flex",gap:"10px",marginTop:"20px"}}>
+                  <button onClick={()=>{onTrackJob({id:uid(),title:selectedJob.title,company:selectedJob.company,source:selectedJob.source,url:"",resumeVersion:"",notes:"",status:"applied",appliedDate:today(),analysis:matchResult});setShowMatchModal(false);}} style={{...btnPrimary,flex:1}}>
+                    Save to Tracker
+                  </button>
+                  <button onClick={()=>setShowMatchModal(false)} style={{...btnGhost}}>Close</button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+/* ─── RESUME SCANNER VIEW ──────────────────────────────────────────── */
+function ResumeView({apiKey}){
+  const [resume,setResume]=useState(()=>S.get("rr_resume")||"");
+  const [jd,setJd]=useState("");
+  const [title,setTitle]=useState("");
+  const [company,setCompany]=useState("");
+  const [loading,setLoading]=useState(false);
+  const [res,setRes]=useState(null);
+  const [err,setErr]=useState("");
+  const [saved,setSaved]=useState(false);
+  const [resumeSaved,setResumeSaved]=useState(!!S.get("rr_resume"));
+
+  function saveResume(){S.set("rr_resume",resume);setResumeSaved(true);setTimeout(()=>setResumeSaved(false),2000);}
+
+  async function analyse(){
+    if(!resume.trim()||!jd.trim()){setErr("Please paste both your resume and job description.");return;}
+    setErr("");setLoading(true);setRes(null);setSaved(false);
+    try{
+      const r=await runAnalysis(resume,jd,apiKey);
+      setLoading(false);
+      if(!r){setErr("Analysis failed — please try again.");return;}
+      setRes(r);
+    }catch(e){setLoading(false);setErr("Error: "+e.message);}
+  }
+
+  return(
+    <div style={{animation:"fadeUp 0.3s ease"}}>
+      <div style={{marginBottom:"28px"}}>
+        <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:"28px",fontWeight:800,letterSpacing:"-0.03em",margin:"0 0 6px"}}>Resume Scanner</h2>
+        <p style={{color:"var(--muted)",fontSize:"14px"}}>Get your ATS score, missing keywords, and exact edits — tailored for UK job market.</p>
+      </div>
+
+      {/* Save resume for job board matching */}
+      <div style={{background:"#fff",borderRadius:"14px",border:"1.5px solid var(--border)",padding:"20px",marginBottom:"20px",boxShadow:"var(--shadow)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px",flexWrap:"wrap",gap:"10px"}}>
+          <div>
+            <h4 style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:"15px",margin:"0 0 3px"}}>Your Saved Resume</h4>
+            <p style={{fontSize:"12px",color:"var(--muted)"}}>Saved here is used for AI match scores across the job board</p>
+          </div>
+          <button onClick={saveResume} style={{...btnPrimary,padding:"8px 18px",fontSize:"13px"}}>
+            {resumeSaved?"✓ Saved!":"Save Resume"}
+          </button>
+        </div>
+        <textarea value={resume} onChange={e=>setResume(e.target.value)} placeholder="Paste your resume text here to enable AI matching across all job listings..." style={{...txta,height:"120px",fontSize:"13px"}}/>
+      </div>
+
+      {/* Analysis section */}
+      <div style={{background:"#fff",borderRadius:"14px",border:"1.5px solid var(--border)",padding:"24px",boxShadow:"var(--shadow)"}}>
+        <h4 style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:"16px",margin:"0 0 16px"}}>Analyse Against a Specific Job</h4>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px",marginBottom:"12px"}}>
+          <div><label style={lbl}>Job Title</label><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="e.g. SFMC Consultant" style={inp}/></div>
+          <div><label style={lbl}>Company</label><input value={company} onChange={e=>setCompany(e.target.value)} placeholder="e.g. Accenture" style={inp}/></div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"16px",marginBottom:"16px"}}>
+          <div><label style={lbl}>Your Resume</label><textarea value={resume} onChange={e=>setResume(e.target.value)} placeholder="Paste resume..." style={{...txta,height:"220px"}}/></div>
+          <div><label style={lbl}>Job Description</label><textarea value={jd} onChange={e=>setJd(e.target.value)} placeholder="Paste full job description..." style={{...txta,height:"220px"}}/></div>
+        </div>
+        {err&&<div style={{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:"8px",padding:"12px",marginBottom:"14px",fontSize:"13px",color:"var(--red)"}}>{err}</div>}
+        <button onClick={analyse} disabled={loading} style={{...btnPrimary,opacity:loading?0.7:1}}>
+          {loading?"Analysing...":"Analyse My Resume"}
+        </button>
+      </div>
+
+      {loading&&(
+        <div style={{textAlign:"center",padding:"56px 0",color:"var(--muted)"}}>
+          <div style={{fontSize:"36px",display:"inline-block",animation:"spin 1.2s linear infinite"}}>⚙</div>
+          <p style={{marginTop:"14px",fontWeight:600}}>Running ATS analysis...</p>
+          <p style={{fontSize:"12px",color:"var(--muted)",marginTop:"4px"}}>10–20 seconds typically</p>
+        </div>
+      )}
+
+      {res&&(
+        <div style={{marginTop:"24px",animation:"fadeUp 0.4s ease"}}>
+          <div style={{display:"flex",alignItems:"center",gap:"32px",flexWrap:"wrap",background:"#fff",border:"1.5px solid var(--border)",borderRadius:"14px",padding:"28px",marginBottom:"20px",boxShadow:"var(--shadow)"}}>
+            <ScoreRing score={res.score}/>
+            <div style={{flex:1,minWidth:"220px"}}>
+              <h3 style={{fontFamily:"'Syne',sans-serif",fontSize:"20px",fontWeight:800,margin:"0 0 8px",letterSpacing:"-0.02em"}}>{res.score>=75?"Strong match":"Needs targeted edits"}</h3>
+              <p style={{color:"var(--muted)",fontSize:"14px",lineHeight:1.6}}>{res.summary}</p>
+            </div>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"14px",marginBottom:"14px"}}>
+            {[{title:"Keywords Present",items:res.presentKeywords?.slice(0,10),v:"green"},{title:"Missing Keywords",items:res.missingKeywords,v:"red"}].map(s=>(
+              <div key={s.title} style={{background:"#fff",borderRadius:"12px",border:"1.5px solid var(--border)",padding:"18px"}}>
+                <p style={{...lbl,marginBottom:"10px"}}>{s.title}</p>
+                <div>{s.items?.map(k=><Pill key={k} label={k} v={s.v}/>)}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{background:"#fff",borderRadius:"12px",border:"1.5px solid var(--border)",padding:"18px",marginBottom:"14px"}}>
+            <p style={{...lbl,marginBottom:"10px"}}>Top Skills Required</p>
+            <div>{res.topSkillsRequired?.map(s=><Pill key={s} label={s} v="blue"/>)}</div>
+          </div>
+
+          <div style={{background:"#fff",borderRadius:"12px",border:"1.5px solid var(--border)",padding:"18px",marginBottom:"14px"}}>
+            <p style={{...lbl,marginBottom:"10px"}}>Quick Wins</p>
+            {res.quickWins?.map((w,i)=>(
+              <div key={i} style={{display:"flex",gap:"10px",padding:"10px 12px",background:"var(--bg)",borderRadius:"8px",marginBottom:"6px",fontSize:"13px"}}>
+                <span style={{background:"var(--accent2)",color:"var(--accent)",borderRadius:"50%",width:"20px",height:"20px",display:"inline-flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:"11px",flexShrink:0}}>{i+1}</span>
+                {w}
+              </div>
+            ))}
+          </div>
+
+          <div style={{background:"#fff",borderRadius:"12px",border:"1.5px solid var(--border)",padding:"18px",marginBottom:"14px"}}>
+            <p style={{...lbl,marginBottom:"10px"}}>Suggested Alterations</p>
+            {res.alterations?.map((a,i)=>(
+              <div key={i} style={{padding:"12px 14px",background:"var(--bg)",borderRadius:"8px",marginBottom:"8px"}}>
+                <div style={{marginBottom:"5px"}}><Pill label={a.section} v="amber"/></div>
+                <p style={{margin:"0 0 3px",color:"var(--muted)",fontSize:"12px"}}><b>Issue:</b> {a.issue}</p>
+                <p style={{margin:0,fontSize:"13px"}}><b>Fix:</b> {a.suggestion}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── AI NINJA (chat) VIEW ─────────────────────────────────────────── */
+function AINinjaView({apiKey}){
+  const [msgs,setMsgs]=useState([{role:"assistant",content:"Hi! I am your AI career assistant. Ask me anything about your resume, cover letters, interview prep, UK job market, or salary negotiation."}]);
+  const [input,setInput]=useState("");
+  const [loading,setLoading]=useState(false);
+  const endRef=useRef(null);
+
+  useEffect(()=>{endRef.current?.scrollIntoView({behavior:"smooth"});},[msgs]);
+
+  async function send(){
+    if(!input.trim()||loading) return;
+    const userMsg={role:"user",content:input.trim()};
+    setMsgs(m=>[...m,userMsg]);setInput("");setLoading(true);
+    try{
+      const history=msgs.concat(userMsg).map(m=>({role:m.role,content:m.content}));
+      const reply=await callClaude("You are an expert UK career coach and Salesforce/CRM specialist. Help with resumes, cover letters, job searching in the UK, salary negotiation, and interview prep. Be concise and practical. Focus on the UK job market.",input.trim(),apiKey);
+      setMsgs(m=>[...m,{role:"assistant",content:reply}]);
+    }catch(e){setMsgs(m=>[...m,{role:"assistant",content:"Sorry, I ran into an error: "+e.message}]);}
+    setLoading(false);
+  }
+
+  const suggestions=["Write a cover letter for an SFMC Consultant role","What salary should I ask for as an SFMC specialist in London?","How do I explain a gap in employment?","What are the top SFMC certifications for 2025?","How do I get a job without UK experience?"];
+
+  return(
+    <div style={{animation:"fadeUp 0.3s ease",display:"flex",flexDirection:"column",height:"calc(100vh - 120px)"}}>
+      <div style={{marginBottom:"20px"}}>
+        <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:"28px",fontWeight:800,letterSpacing:"-0.03em",margin:"0 0 4px"}}>AI Career Assistant</h2>
+        <p style={{color:"var(--muted)",fontSize:"14px"}}>Ask anything about your career, CV, interviews, or the UK job market.</p>
+      </div>
+      <div style={{flex:1,background:"#fff",borderRadius:"14px",border:"1.5px solid var(--border)",padding:"20px",overflowY:"auto",marginBottom:"12px",boxShadow:"var(--shadow)"}}>
+        {msgs.map((m,i)=>(
+          <div key={i} style={{display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start",marginBottom:"12px",animation:"fadeUp 0.2s ease"}}>
+            <div style={{maxWidth:"78%",padding:"12px 16px",borderRadius:m.role==="user"?"14px 14px 4px 14px":"14px 14px 14px 4px",background:m.role==="user"?"var(--accent)":"var(--bg)",color:m.role==="user"?"#fff":"var(--text)",fontSize:"14px",lineHeight:1.6,whiteSpace:"pre-wrap"}}>
+              {m.content}
+            </div>
+          </div>
+        ))}
+        {loading&&<div style={{display:"flex",justifyContent:"flex-start",marginBottom:"12px"}}><div style={{padding:"12px 16px",borderRadius:"14px 14px 14px 4px",background:"var(--bg)",color:"var(--muted)",fontSize:"14px",animation:"pulse 1.5s infinite"}}>Thinking...</div></div>}
+        <div ref={endRef}/>
+      </div>
+      {msgs.length<3&&(
+        <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"10px"}}>
+          {suggestions.map(s=>(
+            <button key={s} onClick={()=>{setInput(s);}} style={{padding:"6px 12px",borderRadius:"8px",border:"1.5px solid var(--border)",background:"#fff",fontSize:"12px",cursor:"pointer",color:"var(--muted)",fontWeight:500}}>{s}</button>
+          ))}
+        </div>
+      )}
+      <div style={{display:"flex",gap:"10px"}}>
+        <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&send()} placeholder="Ask anything about your career..." style={{...inp,flex:1,fontSize:"14px",padding:"12px 16px"}}/>
+        <button onClick={send} disabled={loading||!input.trim()} style={{...btnPrimary,padding:"12px 24px",opacity:loading||!input.trim()?0.6:1}}>Send</button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── APPLICATION TRACKER VIEW ─────────────────────────────────────── */
+function TrackerView({jobs,setJobs}){
+  const [filter,setFilter]=useState("all");
+  const [showAdd,setShowAdd]=useState(false);
+  const [viewJob,setViewJob]=useState(null);
+  const [form,setForm]=useState({title:"",company:"",source:"LinkedIn",url:"",resumeVersion:"",notes:""});
+  const counts=Object.fromEntries(Object.keys(STATUS).map(k=>[k,jobs.filter(j=>j.status===k).length]));
+  const filtered=filter==="all"?jobs:jobs.filter(j=>j.status===filter);
+
+  function addJob(){
+    if(!form.title.trim()||!form.company.trim()) return;
+    const j={id:uid(),...form,status:"applied",appliedDate:today(),analysis:null};
+    const u=[j,...jobs];setJobs(u);S.set("rr_jobs",u);
+    setShowAdd(false);setForm({title:"",company:"",source:"LinkedIn",url:"",resumeVersion:"",notes:""});
+  }
+  function upStatus(id,s){const u=jobs.map(j=>j.id===id?{...j,status:s}:j);setJobs(u);S.set("rr_jobs",u);}
+  function del(id){const u=jobs.filter(j=>j.id!==id);setJobs(u);S.set("rr_jobs",u);if(viewJob?.id===id)setViewJob(null);}
+
+  return(
+    <div style={{animation:"fadeUp 0.3s ease"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"24px",flexWrap:"wrap",gap:"12px"}}>
+        <div>
+          <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:"28px",fontWeight:800,letterSpacing:"-0.03em",margin:"0 0 4px"}}>Application Tracker</h2>
+          <p style={{color:"var(--muted)",fontSize:"14px"}}>Track every application with the exact resume version you sent.</p>
+        </div>
+        <button onClick={()=>setShowAdd(true)} style={btnPrimary}>+ Add Application</button>
+      </div>
+
+      {/* Pipeline */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:"8px",marginBottom:"20px"}}>
+        {Object.entries(STATUS).map(([k,v])=>(
+          <div key={k} onClick={()=>setFilter(k)} style={{background:v.bg,border:`1.5px solid ${v.c}33`,borderRadius:"10px",padding:"12px 8px",textAlign:"center",cursor:"pointer",transition:"transform 0.1s"}}>
+            <div style={{fontSize:"24px",fontWeight:800,color:v.c,fontFamily:"'Syne',sans-serif"}}>{counts[k]||0}</div>
+            <div style={{fontSize:"10px",fontWeight:700,color:v.c,marginTop:"2px",textTransform:"uppercase",letterSpacing:"0.04em"}}>{v.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"16px"}}>
+        {[["all","All",jobs.length],...Object.entries(STATUS).map(([k,v])=>[k,v.label,counts[k]])].map(([k,label,count])=>(
+          <button key={k} onClick={()=>setFilter(k)} style={{padding:"5px 14px",borderRadius:"999px",fontSize:"12px",fontWeight:600,cursor:"pointer",border:filter===k?"2px solid var(--text)":"1.5px solid var(--border)",background:filter===k?"var(--text)":"#fff",color:filter===k?"#fff":"var(--muted)"}}>
+            {label}{Number(count)>0&&<span style={{opacity:0.6}}> ({count})</span>}
+          </button>
+        ))}
+      </div>
+
+      {filtered.length===0&&(
+        <div style={{textAlign:"center",padding:"72px 0",color:"var(--muted)"}}>
+          <div style={{fontSize:"48px",marginBottom:"14px"}}>📋</div>
+          <p style={{fontFamily:"'Syne',sans-serif",fontSize:"18px",fontWeight:700,marginBottom:"6px"}}>No applications yet</p>
+          <p style={{fontSize:"13px"}}>Add jobs manually or track them from the job board.</p>
+        </div>
+      )}
+
+      <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
+        {filtered.map(job=>(
+          <div key={job.id} style={{background:"#fff",border:"1.5px solid var(--border)",borderRadius:"12px",padding:"16px 20px",display:"flex",alignItems:"center",gap:"12px",flexWrap:"wrap",boxShadow:"var(--shadow)"}}>
+            <div style={{flex:1,minWidth:"180px"}}>
+              <div style={{fontWeight:700,fontSize:"15px",fontFamily:"'Syne',sans-serif"}}>{job.title}</div>
+              <div style={{color:"var(--muted)",fontSize:"12px",marginTop:"3px"}}>{job.company} · {job.source} · {job.appliedDate}</div>
+              {job.resumeVersion&&<div style={{fontSize:"11px",color:"var(--accent)",marginTop:"3px",fontWeight:600}}>📄 {job.resumeVersion}</div>}
+              {job.notes&&<div style={{fontSize:"11px",color:"var(--muted)",marginTop:"2px",fontStyle:"italic"}}>{job.notes}</div>}
+            </div>
+            {job.analysis&&<div style={{fontFamily:"'Syne',sans-serif",fontSize:"18px",fontWeight:800,color:job.analysis.score>=75?"var(--accent)":job.analysis.score>=50?"var(--amber)":"var(--red)"}}>{job.analysis.score}%</div>}
+            <StatusDrop status={job.status} onChange={s=>upStatus(job.id,s)}/>
+            {job.url&&<a href={job.url} target="_blank" rel="noreferrer" style={{fontSize:"12px",color:"var(--blue)",fontWeight:600}}>View ↗</a>}
+            {job.analysis&&<button onClick={()=>setViewJob(job)} style={{...btnGhost,padding:"6px 12px",fontSize:"12px"}}>Analysis</button>}
+            <button onClick={()=>del(job.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#d1d5db",fontSize:"16px",padding:"4px"}}>×</button>
+          </div>
+        ))}
+      </div>
+
+      <Modal open={showAdd} onClose={()=>setShowAdd(false)}>
+        <h3 style={{fontFamily:"'Syne',sans-serif",fontSize:"22px",fontWeight:800,margin:"0 0 20px",letterSpacing:"-0.02em"}}>Add Application</h3>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px",marginBottom:"12px"}}>
+          <div><label style={lbl}>Job Title *</label><input value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} placeholder="e.g. SFMC Consultant" style={inp}/></div>
+          <div><label style={lbl}>Company *</label><input value={form.company} onChange={e=>setForm(f=>({...f,company:e.target.value}))} placeholder="e.g. Accenture" style={inp}/></div>
+        </div>
+        <div style={{marginBottom:"12px"}}>
+          <label style={lbl}>Source</label>
+          <select value={form.source} onChange={e=>setForm(f=>({...f,source:e.target.value}))} style={inp}>
+            {SOURCES.map(s=><option key={s}>{s}</option>)}
+          </select>
+        </div>
+        <div style={{marginBottom:"12px"}}><label style={lbl}>Job URL</label><input type="url" value={form.url} onChange={e=>setForm(f=>({...f,url:e.target.value}))} placeholder="https://linkedin.com/jobs/..." style={inp}/></div>
+        <div style={{marginBottom:"12px"}}><label style={lbl}>Resume Version Used</label><input value={form.resumeVersion} onChange={e=>setForm(f=>({...f,resumeVersion:e.target.value}))} placeholder="e.g. Resume v3 - SFMC Focus" style={inp}/></div>
+        <div style={{marginBottom:"20px"}}><label style={lbl}>Notes</label><textarea value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="e.g. Referred by contact, salary £70k" style={{...txta,height:"72px"}}/></div>
+        <div style={{display:"flex",gap:"10px"}}>
+          <button onClick={addJob} style={btnPrimary}>Save Application</button>
+          <button onClick={()=>setShowAdd(false)} style={btnGhost}>Cancel</button>
+        </div>
+      </Modal>
+
+      <Modal open={!!viewJob} onClose={()=>setViewJob(null)}>
+        {viewJob?.analysis&&(
+          <>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"20px",flexWrap:"wrap",gap:"12px"}}>
+              <div>
+                <h3 style={{fontFamily:"'Syne',sans-serif",fontSize:"22px",fontWeight:800,margin:"0 0 3px",letterSpacing:"-0.02em"}}>{viewJob.title}</h3>
+                <p style={{color:"var(--muted)",fontSize:"13px"}}>{viewJob.company}</p>
+                {viewJob.resumeVersion&&<p style={{fontSize:"12px",color:"var(--accent)",fontWeight:600,marginTop:"2px"}}>📄 {viewJob.resumeVersion}</p>}
+              </div>
+              <ScoreRing score={viewJob.analysis.score}/>
+            </div>
+            <p style={{color:"var(--muted)",lineHeight:1.7,marginBottom:"20px",fontSize:"14px"}}>{viewJob.analysis.summary}</p>
+            <div style={{marginBottom:"14px"}}>
+              <p style={lbl}>Missing Keywords</p>
+              <div>{viewJob.analysis.missingKeywords?.map(k=><Pill key={k} label={k} v="red"/>)}</div>
+            </div>
+            <div>
+              <p style={lbl}>Suggested Fixes</p>
+              {viewJob.analysis.alterations?.map((a,i)=>(
+                <div key={i} style={{padding:"12px",background:"var(--bg)",borderRadius:"8px",marginBottom:"8px"}}>
+                  <Pill label={a.section} v="amber"/>
+                  <p style={{margin:"6px 0 3px",fontSize:"12px",color:"var(--muted)"}}><b>Issue:</b> {a.issue}</p>
+                  <p style={{margin:0,fontSize:"13px"}}><b>Fix:</b> {a.suggestion}</p>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+/* ─── MY RESUMES VIEW ──────────────────────────────────────────────── */
+function MyResumesView(){
+  const [resumes,setResumes]=useState(()=>S.get("rr_resumes")||[]);
+  const [showAdd,setShowAdd]=useState(false);
+  const [form,setForm]=useState({name:"",content:"",targetRole:""});
+
+  function addResume(){
+    if(!form.name.trim()||!form.content.trim()) return;
+    const r={id:uid(),...form,created:today()};
+    const u=[r,...resumes];setResumes(u);S.set("rr_resumes",u);
+    setShowAdd(false);setForm({name:"",content:"",targetRole:""});
+  }
+  function del(id){const u=resumes.filter(r=>r.id!==id);setResumes(u);S.set("rr_resumes",u);}
+
+  return(
+    <div style={{animation:"fadeUp 0.3s ease"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"24px",flexWrap:"wrap",gap:"12px"}}>
+        <div>
+          <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:"28px",fontWeight:800,letterSpacing:"-0.03em",margin:"0 0 4px"}}>My Resumes</h2>
+          <p style={{color:"var(--muted)",fontSize:"14px"}}>Store different resume versions for different roles.</p>
+        </div>
+        <button onClick={()=>setShowAdd(true)} style={btnPrimary}>+ Add Resume Version</button>
+      </div>
+
+      {resumes.length===0&&(
+        <div style={{textAlign:"center",padding:"72px 0",color:"var(--muted)"}}>
+          <div style={{fontSize:"48px",marginBottom:"14px"}}>📄</div>
+          <p style={{fontFamily:"'Syne',sans-serif",fontSize:"18px",fontWeight:700,marginBottom:"6px"}}>No resume versions saved</p>
+          <p style={{fontSize:"13px",marginBottom:"20px"}}>Store tailored versions for different job types.</p>
+          <button onClick={()=>setShowAdd(true)} style={btnPrimary}>Add Your First Resume</button>
+        </div>
+      )}
+
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"12px"}}>
+        {resumes.map(r=>(
+          <div key={r.id} style={{background:"#fff",borderRadius:"12px",border:"1.5px solid var(--border)",padding:"20px",boxShadow:"var(--shadow)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"10px"}}>
+              <div>
+                <h4 style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:"15px",margin:"0 0 3px"}}>{r.name}</h4>
+                {r.targetRole&&<p style={{fontSize:"12px",color:"var(--accent)",fontWeight:600}}>{r.targetRole}</p>}
+                <p style={{fontSize:"11px",color:"var(--muted)",marginTop:"2px"}}>Added {r.created}</p>
+              </div>
+              <button onClick={()=>del(r.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#d1d5db",fontSize:"16px"}}>×</button>
+            </div>
+            <p style={{fontSize:"12px",color:"var(--muted)",lineHeight:1.5,marginBottom:"12px"}}>{r.content.slice(0,120)}...</p>
+            <button onClick={()=>{S.set("rr_resume",r.content);alert("Set as active resume for job matching!");}} style={{...btnGhost,fontSize:"12px",padding:"6px 12px",width:"100%"}}>
+              Set as Active Resume
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <Modal open={showAdd} onClose={()=>setShowAdd(false)}>
+        <h3 style={{fontFamily:"'Syne',sans-serif",fontSize:"22px",fontWeight:800,margin:"0 0 20px",letterSpacing:"-0.02em"}}>Save Resume Version</h3>
+        <div style={{marginBottom:"12px"}}><label style={lbl}>Version Name *</label><input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="e.g. Resume v3 - SFMC Focus" style={inp}/></div>
+        <div style={{marginBottom:"12px"}}><label style={lbl}>Target Role</label><input value={form.targetRole} onChange={e=>setForm(f=>({...f,targetRole:e.target.value}))} placeholder="e.g. Salesforce Marketing Cloud Consultant" style={inp}/></div>
+        <div style={{marginBottom:"20px"}}><label style={lbl}>Resume Content *</label><textarea value={form.content} onChange={e=>setForm(f=>({...f,content:e.target.value}))} placeholder="Paste your full resume text..." style={{...txta,height:"200px"}}/></div>
+        <div style={{display:"flex",gap:"10px"}}>
+          <button onClick={addResume} style={btnPrimary}>Save Resume</button>
+          <button onClick={()=>setShowAdd(false)} style={btnGhost}>Cancel</button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+/* ─── PRICING VIEW ─────────────────────────────────────────────────── */
+function PricingView(){
+  return(
+    <div style={{animation:"fadeUp 0.3s ease"}}>
+      <div style={{textAlign:"center",marginBottom:"44px"}}>
+        <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:"36px",fontWeight:800,letterSpacing:"-0.03em",margin:"0 0 12px"}}>Simple Pricing</h2>
+        <p style={{color:"var(--muted)",fontSize:"15px",maxWidth:"440px",margin:"0 auto",lineHeight:1.6}}>Start free. Upgrade when you land your next role.</p>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:"16px",marginBottom:"44px"}}>
+        {[
+          {name:"Free",price:"£0",period:"/forever",highlight:false,tag:null,features:["3 resume analyses/month","Job board access","Track 10 applications","AI chat (5 messages/day)"],cta:"Start Free"},
+          {name:"Pro",price:"£5",period:"/month",highlight:true,tag:"MOST POPULAR",features:["Unlimited resume analyses","Full UK job board","Unlimited tracking","Unlimited AI chat","Resume version history","Priority support"],cta:"Start Pro — £5/mo"},
+          {name:"Coach",price:"£30",period:"/month",highlight:false,tag:null,features:["Everything in Pro","10 client seats","Client dashboard","White-label reports","Bulk export","Account manager"],cta:"For Career Coaches"},
+        ].map(p=>(
+          <div key={p.name} style={{border:p.highlight?"2px solid var(--accent)":"1.5px solid var(--border)",borderRadius:"18px",padding:"28px",background:p.highlight?"var(--accent3)":"#fff",color:p.highlight?"#fff":"var(--text)",position:"relative"}}>
+            {p.tag&&<div style={{position:"absolute",top:"-13px",left:"50%",transform:"translateX(-50%)",background:"#f59e0b",color:"#111",borderRadius:"999px",padding:"3px 16px",fontSize:"10px",fontWeight:800,letterSpacing:"0.08em",whiteSpace:"nowrap"}}>{p.tag}</div>}
+            <div style={{fontFamily:"'Syne',sans-serif",fontSize:"20px",fontWeight:800,marginBottom:"8px",letterSpacing:"-0.02em"}}>{p.name}</div>
+            <div style={{fontSize:"38px",fontWeight:800,fontFamily:"'Syne',sans-serif",lineHeight:1,marginBottom:"20px"}}>{p.price}<span style={{fontSize:"14px",opacity:0.6,fontFamily:"'Instrument Sans',sans-serif"}}>{p.period}</span></div>
+            <div style={{height:"1px",background:p.highlight?"rgba(255,255,255,0.15)":"var(--border)",marginBottom:"20px"}}/>
+            {p.features.map(f=><div key={f} style={{display:"flex",gap:"8px",marginBottom:"10px",fontSize:"13px",lineHeight:1.5}}><span style={{color:"#10b981",flexShrink:0}}>✓</span>{f}</div>)}
+            <button style={{display:"block",width:"100%",marginTop:"24px",padding:"13px",borderRadius:"10px",fontWeight:700,fontSize:"14px",cursor:"pointer",border:p.highlight?"1px solid rgba(255,255,255,0.2)":"1.5px solid var(--accent)",background:p.highlight?"rgba(255,255,255,0.12)":"var(--accent)",color:"#fff",fontFamily:"'Instrument Sans',sans-serif"}}>{p.cta}</button>
+          </div>
+        ))}
+      </div>
+      <div style={{background:"#fff",border:"1.5px solid var(--border)",borderRadius:"18px",padding:"32px"}}>
+        <h3 style={{fontFamily:"'Syne',sans-serif",fontSize:"22px",fontWeight:800,letterSpacing:"-0.02em",margin:"0 0 20px"}}>Revenue Model & Growth Plan</h3>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:"12px",marginBottom:"20px"}}>
+          {[{icon:"💳",t:"Subscriptions",d:"£5/mo Pro · £30/mo Coach. Core MRR."},{icon:"🔗",t:"Affiliate",d:"Indeed/Reed/Total Jobs partner referrals. 3–8% per click."},{icon:"✍️",t:"CV Writing",d:"Upsell professional writers at £49–£149."},{icon:"🏢",t:"Enterprise",d:"Recruitment agencies. £200–500/mo."}].map(r=>(
+            <div key={r.t} style={{background:"var(--bg)",borderRadius:"12px",padding:"16px"}}>
+              <div style={{fontSize:"26px",marginBottom:"8px"}}>{r.icon}</div>
+              <div style={{fontWeight:700,marginBottom:"4px",fontSize:"14px"}}>{r.t}</div>
+              <div style={{color:"var(--muted)",fontSize:"12px",lineHeight:1.5}}>{r.d}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{padding:"16px 18px",background:"#f0faf4",borderRadius:"10px",border:"1.5px solid #a7f3d0"}}>
+          <p style={{margin:0,color:"var(--accent3)",fontSize:"13px",fontWeight:600,lineHeight:1.7}}>
+            Break-even: ~40 Pro users. 500 users = £2,500/mo. 2,000 users = £10,000/mo. Target with UK LinkedIn content + SEO: 300–800 users in 12 months.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── APP SHELL ────────────────────────────────────────────────────── */
+const SIDEBAR_NAV=[
+  {id:"jobs",label:"Job Board",icon:"🇬🇧"},
+  {id:"scanner",label:"Resume Scanner",icon:"📊"},
+  {id:"ninja",label:"AI Assistant",icon:"🤖"},
+  {id:"tracker",label:"Application Tracker",icon:"📋"},
+  {id:"resumes",label:"My Resumes",icon:"📄"},
+  {id:"pricing",label:"Pricing",icon:"💳"},
+];
+
+function App(){
+  const [tab,setTab]=useState("jobs");
+  const [apiKey,setApiKey]=useState(()=>S.get("rr_apikey")||"");
+  const [jobs,setJobs]=useState(()=>S.get("rr_jobs")||[]);
+  const [sidebarOpen,setSidebarOpen]=useState(true);
+
+  function saveJob(j){const u=[j,...jobs];setJobs(u);S.set("rr_jobs",u);setTab("tracker");}
+
+  if(!apiKey) return <ApiKeySetup onSave={k=>{S.set("rr_apikey",k);setApiKey(k);}}/>;
+
+  return(
+    <div style={{display:"flex",minHeight:"100vh",background:"var(--bg)"}}>
+      {/* Sidebar */}
+      <aside style={{width:"220px",background:"var(--sidebar)",color:"var(--sidebar-text)",display:"flex",flexDirection:"column",position:"fixed",top:0,left:0,height:"100vh",zIndex:50,flexShrink:0}}>
+        {/* Logo */}
+        <div style={{padding:"24px 20px 20px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
+          <div style={{fontFamily:"'Syne',sans-serif",fontSize:"20px",fontWeight:800,letterSpacing:"-0.03em",marginBottom:"2px"}}>
+            Role<span style={{color:"var(--accent)"}}>Ready</span>
+          </div>
+          <div style={{fontSize:"11px",color:"var(--sidebar-muted)",fontWeight:500,letterSpacing:"0.06em"}}>UK JOB PLATFORM</div>
+        </div>
+
+        {/* Nav */}
+        <nav style={{flex:1,padding:"12px 10px",overflowY:"auto"}}>
+          <div style={{fontSize:"10px",color:"var(--sidebar-muted)",fontWeight:700,letterSpacing:"0.1em",padding:"8px 10px 6px",textTransform:"uppercase"}}>Navigation</div>
+          {SIDEBAR_NAV.map(n=>(
+            <button key={n.id} id={n.id==="scanner"?"resumeTab":undefined} onClick={()=>setTab(n.id)} style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"10px 12px",borderRadius:"9px",border:"none",cursor:"pointer",fontSize:"13px",fontWeight:tab===n.id?700:500,background:tab===n.id?"rgba(29,107,62,0.25)":"transparent",color:tab===n.id?"#fff":"var(--sidebar-muted)",marginBottom:"2px",textAlign:"left",transition:"all 0.15s",fontFamily:"'Instrument Sans',sans-serif"}}>
+              <span style={{fontSize:"15px",opacity:tab===n.id?1:0.7}}>{n.icon}</span>
+              {n.label}
+              {n.id==="tracker"&&jobs.length>0&&<span style={{marginLeft:"auto",background:"var(--accent)",color:"#fff",borderRadius:"999px",fontSize:"10px",fontWeight:700,padding:"1px 7px"}}>{jobs.length}</span>}
+            </button>
+          ))}
+        </nav>
+
+        {/* Bottom */}
+        <div style={{padding:"14px 14px 20px",borderTop:"1px solid rgba(255,255,255,0.06)"}}>
+          <button onClick={()=>{S.set("rr_apikey","");setApiKey("");}} style={{display:"flex",alignItems:"center",gap:"8px",width:"100%",padding:"9px 12px",borderRadius:"8px",border:"none",cursor:"pointer",fontSize:"12px",background:"rgba(255,255,255,0.06)",color:"var(--sidebar-muted)",fontFamily:"'Instrument Sans',sans-serif",fontWeight:500}}>
+            🔑 API Key Settings
+          </button>
+        </div>
+      </aside>
+
+      {/* Main content */}
+      <main style={{marginLeft:"220px",flex:1,padding:"28px 32px",minHeight:"100vh"}}>
+        {/* Top bar */}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"24px"}}>
+          <div>
+            <h1 style={{fontFamily:"'Syne',sans-serif",fontSize:"16px",fontWeight:700,color:"var(--muted)",letterSpacing:"0.01em"}}>
+              {SIDEBAR_NAV.find(n=>n.id===tab)?.icon} {SIDEBAR_NAV.find(n=>n.id===tab)?.label}
+            </h1>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
+            <span style={{fontSize:"12px",color:"var(--muted)"}}>{jobs.length} tracked</span>
+            <div style={{width:"32px",height:"32px",borderRadius:"50%",background:"var(--accent)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:"13px",fontFamily:"'Syne',sans-serif"}}>V</div>
+          </div>
+        </div>
+
+        {/* Page content */}
+        {tab==="jobs"&&<JobBoardView apiKey={apiKey} onTrackJob={saveJob}/>}
+        {tab==="scanner"&&<ResumeView apiKey={apiKey}/>}
+        {tab==="ninja"&&<AINinjaView apiKey={apiKey}/>}
+        {tab==="tracker"&&<TrackerView jobs={jobs} setJobs={setJobs}/>}
+        {tab==="resumes"&&<MyResumesView/>}
+        {tab==="pricing"&&<PricingView/>}
+      </main>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
